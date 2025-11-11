@@ -16,8 +16,6 @@ CREATE TABLE User (
   password VARCHAR(256)
 );
 
-INSERT INTO User(username, password) VALUES
-("airbus01","$2a$10$slYQmyNdGzTn7ZLBXBChFOC9f6kFjAqPhccnP6DxlWXx2lPk1C3G6"),
-("airbus02","$2a$10$ZnnAdfh3cc7a/b1aODLeoOjifNPbHL6Vo8kpRJj.muPsVp1697hJO");
+-- No default users here; users are seeded via K8s secret-driven init at deploy time.
 
 

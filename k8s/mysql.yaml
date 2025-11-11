@@ -13,6 +13,20 @@ stringData:
   MYSQL_ROOT_PASSWORD: "password"
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  name: app-user-secret
+  namespace: inventory
+type: Opaque
+# Create this Secret locally (not committed) with your values:
+# kubectl -n inventory create secret generic app-user-secret \
+#   --from-literal=APP_USER_EMAIL=airbus01@example.com \
+#   --from-literal=APP_USER_BCRYPT='$2b$12$ytv669gITxzewo6/s0D07eHROTmSUTHQpkjvWremuAPkhXLVdgKby'
+stringData:
+  APP_USER_EMAIL: "airbus01@example.com"
+  APP_USER_BCRYPT: "$2b$12$iT99.EiuHfpZXcocXvH.o.YVkV04fn7/SphGCFsBeTiMZ7MM3G866"
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mysql-init-cm
@@ -34,9 +48,7 @@ data:
       username VARCHAR(256),
       password VARCHAR(256)
     );
-    INSERT INTO User(username, password) VALUES
-    ("airbus01","$2a$10$slYQmyNdGzTn7ZLBXBChFOC9f6kFjAqPhccnP6DxlWXx2lPk1C3G6"),
-    ("airbus02","$2a$10$ZnnAdfh3cc7a/b1aODLeoOjifNPbHL6Vo8kpRJj.muPsVp1697hJO");
+    -- Users are seeded via an initContainer using values from app-user-secret.
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -65,6 +77,37 @@ spec:
       labels:
         app: mysql
     spec:
+      initContainers:
+        - name: seed-users
+          image: busybox:1.36
+          command: ["/bin/sh","-c"]
+          env:
+            - name: APP_USER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: app-user-secret
+                  key: APP_USER_EMAIL
+            - name: APP_USER_BCRYPT
+              valueFrom:
+                secretKeyRef:
+                  name: app-user-secret
+                  key: APP_USER_BCRYPT
+          volumeMounts:
+            - name: cm-scripts
+              mountPath: /cm
+            - name: init-scripts
+              mountPath: /work
+          args:
+            - |
+              set -e
+              cp /cm/init.sql /work/00-init.sql
+              if [ -n "$APP_USER_EMAIL" ] && [ -n "$APP_USER_BCRYPT" ]; then
+                cat > /work/10-user.sql <<EOF
+              USE Product;
+              INSERT INTO User(username, password) VALUES
+              ('$APP_USER_EMAIL','$APP_USER_BCRYPT');
+              EOF
+              fi
       containers:
         - name: mysql
           image: mysql:8.0
@@ -83,13 +126,15 @@ spec:
           volumeMounts:
             - name: mysql-data
               mountPath: /var/lib/mysql
-            - name: mysql-init
+            - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
       volumes:
         - name: mysql-data
           persistentVolumeClaim:
             claimName: mysql-pvc
-        - name: mysql-init
+        - name: init-scripts
+          emptyDir: {}
+        - name: cm-scripts
           configMap:
             name: mysql-init-cm
 ---
