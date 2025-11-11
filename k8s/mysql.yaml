@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inventory
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: inventory
+type: Opaque
+stringData:
+  MYSQL_ROOT_PASSWORD: "password"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-cm
+  namespace: inventory
+data:
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS Product;
+    USE Product;
+    DROP TABLE IF EXISTS Product;
+    CREATE TABLE Product (
+      productId VARCHAR(256) UNIQUE NOT NULL,
+      productName VARCHAR(256),
+      productDescription VARCHAR(3500),
+      productCategory VARCHAR(256),
+      units INT
+    );
+    DROP TABLE IF EXISTS User;
+    CREATE TABLE User (
+      username VARCHAR(256),
+      password VARCHAR(256)
+    );
+    INSERT INTO User(username, password) VALUES
+    ("airbus01","$2a$10$slYQmyNdGzTn7ZLBXBChFOC9f6kFjAqPhccnP6DxlWXx2lPk1C3G6"),
+    ("airbus02","$2a$10$ZnnAdfh3cc7a/b1aODLeoOjifNPbHL6Vo8kpRJj.muPsVp1697hJO");
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  namespace: inventory
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: inventory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          imagePullPolicy: IfNotPresent
+          args: ["--default-authentication-plugin=mysql_native_password"]
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
+            - name: MYSQL_DATABASE
+              value: Product
+          ports:
+            - containerPort: 3306
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+            - name: mysql-init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: mysql-pvc
+        - name: mysql-init
+          configMap:
+            name: mysql-init-cm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: inventory
+spec:
+  selector:
+    app: mysql
+  ports:
+    - port: 3306
+      targetPort: 3306
+
+

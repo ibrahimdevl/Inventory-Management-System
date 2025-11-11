@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ims-frontend
+  namespace: inventory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ims-frontend
+  template:
+    metadata:
+      labels:
+        app: ims-frontend
+    spec:
+      containers:
+        - name: frontend
+          # If using minikube, build image inside minikube with the same name/tag
+          image: inventory-management-system-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ims-frontend
+  namespace: inventory
+spec:
+  selector:
+    app: ims-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+
+
